@@ -1,4 +1,4 @@
-import * as E from "electron";
+import { ipcMain, dialog, shell, WebContents } from "electron";
 import * as path from "path";
 import * as fs from "fs";
 
@@ -6,19 +6,17 @@ import { MANIFEST_FILE_NAME, FILE_EXTENSION_WHITE_LIST } from "Const";
 import { listenToWebBindingPromise, listenToWebRegisterCallback, access, mkPath } from "Utils/Main";
 import { sanitizeFileName, wait } from "Utils/Common";
 
-import WindowManager from "Main/window/WindowManager";
 import { logger } from "Main/Logger";
 import { storage } from "Main/Storage";
 import { dialogs } from "Main/Dialogs";
 import Ext from "Main/ExtensionManager";
 
 export const registerIpcMainHandlers = () => {
-  E.ipcMain.handle("createMultipleNewLocalFileExtensions", async (sender, data) => {
+  ipcMain.handle("createMultipleNewLocalFileExtensions", async (sender, data) => {
     const added: any[] = [];
     const existed: any[] = [];
 
-    const windowManager = WindowManager.instance;
-    const dialogResult = await E.dialog.showOpenDialog(windowManager.mainWindow, data.options);
+    const dialogResult = await dialog.showOpenDialog(null, data.options);
 
     if (!dialogResult || dialogResult.canceled) {
       return { added, existed };
@@ -31,9 +29,11 @@ export const registerIpcMainHandlers = () => {
 
       if (stats.isDirectory() && depth > 0) {
         let fileNames = await fs.promises.readdir(entryPath);
-        fileNames = fileNames.filter(name => name[0] !== ".");
+        fileNames = fileNames.filter((name) => name[0] !== ".");
 
-        await Promise.all(fileNames.map(name => processEntry(path.resolve(entryPath, name), depth - 1, false)));
+        await Promise.all(
+          fileNames.map((name) => processEntry(path.resolve(entryPath, name), depth - 1, false)),
+        );
       } else if (path.basename(entryPath) === MANIFEST_FILE_NAME) {
         const res = Ext.addPath(entryPath);
 
@@ -47,46 +47,49 @@ export const registerIpcMainHandlers = () => {
       }
     }
 
-    await Promise.all(pickedPaths.map(name => processEntry(name, data.depth, true)));
+    await Promise.all(pickedPaths.map((name) => processEntry(name, data.depth, true)));
 
     return { added, existed };
   });
 
-  E.ipcMain.handle("getAllLocalFileExtensionIds", async () => {
+  ipcMain.handle("getAllLocalFileExtensionIds", async () => {
     return Ext.getAllIds();
   });
 
-  E.ipcMain.handle("getLocalFileExtensionManifest", async (sender, id) => {
+  ipcMain.handle("getLocalFileExtensionManifest", async (sender, id) => {
     return Ext.loadExtensionManifest(id);
   });
 
-  E.ipcMain.on("removeLocalFileExtension", async (sender, id) => {
+  ipcMain.on("removeLocalFileExtension", async (sender, id) => {
     Ext.removePath(id);
   });
 
-  E.ipcMain.on("openExtensionDirectory", async (sender, id) => {
+  ipcMain.on("openExtensionDirectory", async (sender, id) => {
     const extensionDirectory = path.parse(Ext.getPath(id)).dir;
 
-    E.shell.openPath(extensionDirectory);
+    shell.openPath(extensionDirectory);
   });
 
-  E.ipcMain.handle("getLocalFileExtensionSource", async (sender, id) => {
+  ipcMain.handle("getLocalFileExtensionSource", async (sender, id) => {
     return Ext.getLocalFileExtensionSource(id);
   });
 
-  E.ipcMain.handle("isDevToolsOpened", async view => {
+  ipcMain.handle("isDevToolsOpened", async (view) => {
     return view.sender.isDevToolsOpened();
   });
 
-  E.ipcMain.handle("themesIsDisabled", async () => {
-    return storage.get().app.disableThemes;
+  ipcMain.handle("themesIsDisabled", async () => {
+    return storage.settings.app.disableThemes;
   });
 
-  listenToWebBindingPromise("openExtensionDirectory", async (webContents: E.WebContents, id: number) => {
-    console.error("TODO");
-  });
+  listenToWebBindingPromise(
+    "openExtensionDirectory",
+    async (webContents: WebContents, id: number) => {
+      console.error("TODO");
+    },
+  );
 
-  E.ipcMain.handle("writeNewExtensionToDisk", async (sender, data) => {
+  ipcMain.handle("writeNewExtensionToDisk", async (sender, data) => {
     let manifest: Extensions.ManifestFile | null = null;
     let manifestFile = null;
 
@@ -120,11 +123,13 @@ export const registerIpcMainHandlers = () => {
     }
 
     const dirName = sanitizeFileName(data.dirName);
-    const lastDir = storage.get().app.lastSavedPluginDir;
+    const lastDir = storage.settings.app.lastSavedPluginDir;
     const dir = lastDir ? `${lastDir}/${dirName}` : dirName;
 
     const saveDir = await dialogs.showSaveDialog({
-      title: manifest.name ? "Choose plugin directory location" : "Choose plugin name and directory location",
+      title: manifest.name
+        ? "Choose plugin directory location"
+        : "Choose plugin name and directory location",
       defaultPath: dir,
     });
 
@@ -134,7 +139,7 @@ export const registerIpcMainHandlers = () => {
 
     const basename = path.basename(saveDir);
 
-    storage.setLastPluginDirectory(path.parse(saveDir).dir);
+    storage.settings.app.lastSavedPluginDir = path.parse(saveDir).dir;
 
     if (!basename) {
       throw new Error("Invalid directory name");
@@ -154,9 +159,14 @@ export const registerIpcMainHandlers = () => {
     const saveFilesPromises = [];
     for (const file of data.files) {
       const filePath = path.join(saveDir, file.name);
-      const promise = fs.promises.writeFile(filePath, file.content, { encoding: "utf8" }).catch(error => {
-        logger.error(`Cannot save file: ${filePath} for extension: "${manifest.name}", error:\n`, error);
-      });
+      const promise = fs.promises
+        .writeFile(filePath, file.content, { encoding: "utf8" })
+        .catch((error) => {
+          logger.error(
+            `Cannot save file: ${filePath} for extension: "${manifest.name}", error:\n`,
+            error,
+          );
+        });
       saveFilesPromises.push(promise);
     }
 
@@ -173,7 +183,7 @@ export const registerIpcMainHandlers = () => {
 
   listenToWebRegisterCallback(
     "registerManifestChangeObserver",
-    (webContents: E.WebContents, args: any, callback: () => void) => {
+    (webContents: WebContents, args: any, callback: () => void) => {
       Ext.addObserver(callback);
 
       return () => {
@@ -182,20 +192,11 @@ export const registerIpcMainHandlers = () => {
     },
   );
 
-  E.ipcMain.handle("add-font-directories", async () => {
+  ipcMain.handle("add-font-directories", async () => {
     return dialogs.showOpenDialog({ properties: ["openDirectory", "multiSelections"] });
   });
-  E.ipcMain.handle("select-export-directory", async () => {
-    const directories = await dialogs.showOpenDialog({ properties: ["openDirectory"] });
 
-    if (!directories) {
-      return null;
-    }
-
-    return directories[0];
-  });
-
-  E.ipcMain.handle("writeFiles", async (sender, data) => {
+  ipcMain.handle("writeFiles", async (sender, data) => {
     const files = data.files;
 
     if (!files.length) {
@@ -204,10 +205,10 @@ export const registerIpcMainHandlers = () => {
 
     let skipReplaceConfirmation = false;
     let directoryPath = null;
-    const lastDir = storage.get().app.lastExportDir || storage.get().app.exportDir;
+    const lastDir = storage.settings.app.lastExportDir || storage.settings.app.exportDir;
 
     if (files.length === 1 && !files[0].name.includes(path.sep)) {
-      const originalFileName = files[0].name.replace(/\//g, "-");
+      const originalFileName = files[0].name;
       const savePath = await dialogs.showSaveDialog({
         defaultPath: `${lastDir}/${path.basename(originalFileName)}`,
         showsTagField: false,
@@ -222,7 +223,7 @@ export const registerIpcMainHandlers = () => {
           skipReplaceConfirmation = true;
         }
 
-        storage.setExportDirectory(path.parse(savePath).dir);
+        storage.settings.app.lastExportDir = path.parse(savePath).dir;
       }
     } else {
       const directories = await dialogs.showOpenDialog({
@@ -235,57 +236,19 @@ export const registerIpcMainHandlers = () => {
         return;
       }
       directoryPath = directories[0];
-      storage.setExportDirectory(directoryPath);
+      storage.settings.app.lastExportDir = directoryPath;
     }
+
     if (!directoryPath) {
       return;
     }
-    directoryPath = path.resolve(directoryPath);
-    let filesToBeReplaced = 0;
-    for (const file of files) {
-      const outputPath = path.join(directoryPath, file.name.replace(/\//g, "-"));
-      const validExtensions = [".fig", ".jpg", ".pdf", ".png", ".svg"];
-      if (
-        path.relative(directoryPath, outputPath).startsWith("..") ||
-        !validExtensions.includes(path.extname(outputPath))
-      ) {
-        await dialogs.showMessageBox({
-          type: "error",
-          title: "Export Failed",
-          message: "Export failed",
-          detail: `"${outputPath}" is not a valid path. No files were saved.`,
-        });
-        return;
-      }
-      try {
-        fs.accessSync(outputPath, fs.constants.R_OK);
-        ++filesToBeReplaced;
-      } catch (ex) {}
-    }
 
-    if (filesToBeReplaced > 0 && !skipReplaceConfirmation) {
-      const single = filesToBeReplaced === 1;
-      const selectedID = await dialogs.showMessageBox({
-        type: "warning",
-        title: "Replace Existing Files",
-        message: `Replace existing file${single ? "" : `s`}?`,
-        detail: `${
-          single
-            ? `"${files[0].name}" already exists`
-            : `${filesToBeReplaced} files including "${files[0].name}" already exist`
-        }. Replacing ${single ? "it" : "them"} will overwrite ${single ? "its" : "their"} existing contents.`,
-        textOkButton: "Replace",
-      });
-      if (selectedID !== 0) {
-        return;
-      }
-    }
     for (const file of files) {
-      const outputPath = path.join(directoryPath, file.name.replace(/\//g, "-"));
-      mkPath(path.dirname(outputPath));
+      const outputPath = path.join(directoryPath, file.name);
+      await mkPath(path.dirname(outputPath));
 
       try {
-        fs.writeFileSync(outputPath, Buffer.from(file.buffer), { encoding: "binary" });
+        await fs.promises.writeFile(outputPath, Buffer.from(file.buffer), { encoding: "binary" });
       } catch (ex) {
         await dialogs.showMessageBox({
           type: "error",

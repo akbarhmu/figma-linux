@@ -26,7 +26,7 @@ Figma-linux is an unofficial [Electron](http://electron.atom.io)-based  [Figma](
 	</a>
 </p>
 
-[![Codacy Badge](https://api.codacy.com/project/badge/Grade/d80ff1e7c3fe4da28e2e50a28d4ead7c)](https://www.codacy.com/manual/ChugunovRoman/figma-linux?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=ChugunovRoman/figma-linux&amp;utm_campaign=Badge_Grade)
+<!-- [![Codacy Badge](https://api.codacy.com/project/badge/Grade/d80ff1e7c3fe4da28e2e50a28d4ead7c)](https://www.codacy.com/manual/ChugunovRoman/figma-linux?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=ChugunovRoman/figma-linux&amp;utm_campaign=Badge_Grade) -->
 [![Snap](https://snapcraft.io/figma-linux/badge.svg)](https://snapcraft.io/figma-linux)
 
 <p>
@@ -137,6 +137,13 @@ Aside from that, you can also run:
 
 ATTENTION:
 When you do changes in middleware component, You need to rebuild (`npm run build`) and restart the app each time, because the middleware execute only on run the app, Hot Reload won't work.
+
+Example of **.env** for local development:
+```
+NODE_ENV=dev
+DEV_PANEL_PORT=3330
+DEV_SETTINGS_PORT=3331
+```
 
 
 
