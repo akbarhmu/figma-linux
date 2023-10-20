@@ -22,7 +22,7 @@ import { storage } from "./Storage";
 import ThemeManager from "./Ui/ThemeManager";
 import WindowManager from "./Ui/WindowManager";
 import Session from "./Session";
-import FontManager from "./FontManager";
+import FontManager from "./Fonts";
 
 export default class App {
   constructor(
@@ -34,7 +34,7 @@ export default class App {
     const isSingleInstance = app.requestSingleInstanceLock();
 
     if (!isSingleInstance) {
-      this.windowManager.focusLastWindow();
+      app.emit("focusLastWindow");
       app.quit();
       return;
     }
@@ -66,7 +66,7 @@ export default class App {
   private ready = (): void => {
     const { figmaUrl } = Args();
 
-    this.windowManager.newWindow();
+    this.windowManager.restoreState();
     this.session.handleAppReady();
 
     setTimeout(() => {
@@ -122,15 +122,12 @@ export default class App {
     this.themeManager.loadCreatorTheme();
   }
   private setAuthedUsers(_: IpcMainEvent, userIds: string[]) {
-    const figmaUserIDs = storage.settings.authedUserIDs;
-
-    if (!util.isDeepStrictEqual(figmaUserIDs, userIds)) {
+    if (!Array.isArray(storage.settings.authedUserIDs)) {
       storage.settings.authedUserIDs = userIds;
+      storage.save();
     }
 
-    if (userIds.length === 1) {
-      storage.settings.userId = userIds[0];
-    }
+    storage.settings.authedUserIDs = [...new Set([...storage.settings.authedUserIDs, ...userIds])];
   }
   private setWorkspaceName(_: IpcMainEvent, name: string) {
     logger.info("The setWorkspaceName not implemented, workspaceName: ", name);
@@ -172,6 +169,7 @@ export default class App {
       useSessionCookies: true,
     });
 
+    // TODO: remove only current user's id
     storage.settings.authedUserIDs = [];
 
     try {
@@ -194,6 +192,7 @@ export default class App {
     app.quit();
   }
   private quitApp() {
+    this.windowManager.saveState();
     storage.save();
 
     app.quit();
@@ -211,8 +210,6 @@ export default class App {
 
     app.on("ready", this.ready.bind(this));
     app.on("second-instance", this.secondInstance.bind(this));
-    // TODO: possibly remove "browser-window-created"
-    app.on("browser-window-created", (e, window) => window.setMenu(null));
     app.on("window-all-closed", this.onWindowAllClosed.bind(this));
     app.on("relaunchApp", this.relaunchApp.bind(this));
     app.on("signOut", this.logout.bind(this));

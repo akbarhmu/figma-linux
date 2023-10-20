@@ -12,6 +12,7 @@ declare namespace Types {
     view: import("electron").BrowserView;
   }
 
+  type TabIdType = number | "mainTab" | "communityTab";
   type TabFront = Pick<Tab, "id" | "title" | "order" | "isUsingMicrophone" | "isInVoiceCall">;
 
   interface AddTabProps {
@@ -19,11 +20,17 @@ declare namespace Types {
     url: string;
     title?: string;
     focused?: boolean;
+    order?: number;
   }
 
   interface TabData {
     micAccess: boolean;
     view: import("electron").BrowserView;
+  }
+
+  interface WindowInitOpts {
+    userId?: string;
+    tabs?: Types.SavedTab[];
   }
 
   interface SavedTab {
@@ -56,8 +63,16 @@ declare namespace Types {
       disableThemes: boolean;
       panelHeight: number;
       saveLastOpenedTabs: boolean;
+      hasOpenedCommunityTab: boolean;
       exportDir: string;
       fontDirs: string[];
+      recentlyClosedTabs: SavedTab[];
+      windowsState: {
+        [key: string]: {
+          userId: string;
+          tabs: SavedTab[];
+        };
+      };
       lastOpenedTabs:
         | {
             [key: string]: SavedTab[];

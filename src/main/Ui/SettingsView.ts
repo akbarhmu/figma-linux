@@ -105,16 +105,7 @@ export default class SettingsView {
 
     this.disableThemesChanged = true;
   }
-  private saveSettings(_: IpcMainEvent, settings: Types.SettingsInterface) {
-    storage.settings = settings;
-  }
-
-  private toggleDevTools() {
-    toggleDetachedDevTools(this.view.webContents);
-  }
-  private syncThemesStart() {
-    toggleDetachedDevTools(this.view.webContents);
-  }
+  private syncThemesStart() {}
   private syncThemesEnd(themes: Themes.Theme[]) {
     this.view.webContents.send("themesLoaded", themes);
   }
@@ -142,10 +133,7 @@ export default class SettingsView {
     ipcMain.on("disableThemesChanged", this.disableThemesChange.bind(this));
     ipcMain.on("changeTheme", this.changeTheme.bind(this));
     ipcMain.on("frontReady", this.handleFrontReady.bind(this));
-    // TODO: Move to Storage class
-    ipcMain.on("saveSettings", this.saveSettings.bind(this));
 
-    app.on("toggleSettingsDeveloperTools", this.toggleDevTools.bind(this));
     app.on("syncThemesStart", this.syncThemesStart.bind(this));
     app.on("syncThemesEnd", this.syncThemesEnd.bind(this));
     app.on("loadCurrentTheme", this.loadCurrentTheme.bind(this));

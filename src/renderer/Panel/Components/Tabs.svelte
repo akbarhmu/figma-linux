@@ -2,9 +2,11 @@
   import { ipcRenderer } from "electron";
   import type { MouseWheelInputEvent } from "electron";
   import { tabs, currentTab } from "../store";
+  import { closeTab, tabFocus } from "./utils";
   import List from "./List.svelte";
+  import { NEW_FILE_TAB_TITLE } from "../../../constants/other";
 
-  export let currentTabId: number | undefined;
+  let currentTabId: number | undefined;
 
   let item: HTMLDivElement;
 
@@ -20,14 +22,12 @@
     switch (event.button) {
       // left mouse button
       case 0: {
-        currentTab.set(id);
-        ipcRenderer.send("setTabFocus", id);
+        tabFocus(id);
         break;
       }
       // wheel mouse button
       case 1: {
-        tabs.deleteTab(id);
-        ipcRenderer.send("closeTab", id);
+        closeTab(id);
         break;
       }
       // right mouse button
@@ -39,16 +39,31 @@
   }
 
   function onClickClose(event: MouseEvent, id: number) {
-    tabs.deleteTab(id);
-    ipcRenderer.send("closeTab", id);
+    closeTab(id);
   }
 
   function onDndConsider(event: any) {
     tabs.set(event.detail.items);
   }
   function onDndFinalize(event: any) {
-    tabs.set(event.detail.items);
+    const items = event.detail.items as Types.TabFront[];
+    tabs.set(
+      items
+        .map((tab, index) => ({
+          ...tab,
+          order: tab.title === NEW_FILE_TAB_TITLE ? 0 : index + 1,
+        }))
+        .sort((a, b) => (a.order > b.order ? 1 : -1)),
+    );
   }
+
+  currentTab.subscribe((id) => {
+    if (typeof id === "number") {
+      currentTabId = id;
+    } else {
+      currentTabId = undefined;
+    }
+  });
 </script>
 
 <div class="panel-tabs" bind:this={item} on:mousewheel={wheelHandler}>

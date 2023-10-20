@@ -17,6 +17,30 @@ declare namespace WebApi {
     title: string;
   }
 
+  interface CreateFile {
+    url: string;
+    newFileInfo: {
+      folder_id: number | null;
+      org_id: number | null;
+      openNewFileIn: "new_tab"; // enum value?
+      trackingInfo: {
+        from: "desktop_new_tab_button"; // enum value?
+        selectedView: {
+          view: "desktopNewTab"; // enum value?
+        };
+      };
+      editorType: "design"; // enum value?
+      localFileKey: string;
+    };
+    editorType: "design"; // enum value?
+    isFromNewTabPage: boolean;
+  }
+
+  interface OpenCommunity {
+    path: string;
+    userId: string;
+  }
+
   interface ExtensionId {
     id: number;
   }
@@ -66,5 +90,20 @@ declare namespace WebApi {
   }
   interface SetFigjamEnabled {
     figjamEnabled: boolean;
+  }
+  interface NavigationConfigRule {
+    test: string;
+    urlType: string;
+    normalizedPath?: any;
+    title?: any;
+    isNewFile?: boolean;
+  }
+  interface NavigationConfig {
+    rules: NavigationConfigRule[];
+  }
+  interface SetInitOptions {
+    userId: string;
+    orgId: string | null;
+    navigationConfig: NavigationConfig;
   }
 }

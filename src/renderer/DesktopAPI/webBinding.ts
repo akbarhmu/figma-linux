@@ -1,7 +1,7 @@
+import type { IpcRendererEvent } from "electron";
 import * as E from "electron";
 
 import { sendMsgToMain, registerCallbackWithMainProcess } from "Utils/Render";
-import { isMenuItem } from "Utils/Common";
 import { themes } from "./ThemesApplier";
 
 interface IntiApiOptions {
@@ -9,7 +9,7 @@ interface IntiApiOptions {
   fileBrowser: boolean;
 }
 
-const API_VERSION = 53;
+const API_VERSION = 100;
 let webPort: MessagePort;
 const mainProcessCancelCallbacks: Map<number, () => void> = new Map();
 
@@ -68,20 +68,6 @@ const initWebApi = (props: IntiApiOptions) => {
   let messageHandler: (name: string, args: any) => void;
   let nextPromiseID = 0;
   let nextCallbackID = 0;
-  const messageQueue: any[] = [];
-
-  const tryFlushMessages = () => {
-    if (messageHandler) {
-      let msg = messageQueue.shift();
-      while (msg) {
-        msg = messageQueue.shift();
-        if (!msg) {
-          break;
-        }
-        messageHandler(msg.name, msg.args);
-      }
-    }
-  };
 
   window.__figmaContent = false;
 
@@ -94,38 +80,6 @@ const initWebApi = (props: IntiApiOptions) => {
     fileBrowser: props.fileBrowser,
     postMessage: function (name, args, transferList): void {
       console.log("postMessage, name, args, transferList: ", name, args, transferList);
-
-      // FIXME: ugly hack
-      if (!/recent/.test(window.location.href) && name === "updateActionState") {
-        console.log("postMessage ugly hack: ", name, args);
-        const state = {
-          "save-as": true,
-          "export-selected-exportables": true,
-          "toggle-grid": true,
-          "toggle-shown-layout-grids": true,
-          "toggle-show-masks": true,
-          "toggle-show-artboard-outlines": true,
-          "toggle-rulers": true,
-          "toggle-sidebar": true,
-          "toggle-ui": true,
-          "toggle-outlines": true,
-          "toggle-layers": true,
-          "toggle-publish": true,
-          "toggle-library": true,
-          "toggle-pixel-preview": true,
-          "toggle-checkerboard": true,
-          "zoom-in": true,
-          "zoom-out": true,
-          "zoom-reset": true,
-          "zoom-to-fit": true,
-          "zoom-to-selection": true,
-          "next-artboard": true,
-          "previous-artboard": true,
-        };
-
-        args = { state: { ...args.state, ...state } };
-      }
-
       channel.port1.postMessage({ name, args }, transferList);
     },
     registerCallback: function (name, args, callback) {
@@ -147,7 +101,6 @@ const initWebApi = (props: IntiApiOptions) => {
     },
     setMessageHandler: function (handler: () => void): void {
       messageHandler = handler;
-      tryFlushMessages();
     },
   };
 
@@ -176,8 +129,7 @@ const initWebApi = (props: IntiApiOptions) => {
         console.log("callback missing? ", msg);
       }
     } else if (msg.name != null) {
-      messageQueue.push(msg);
-      tryFlushMessages();
+      messageHandler(msg.name, msg.args);
     }
   };
 
@@ -188,14 +140,13 @@ const initWebBindings = (): void => {
   E.ipcRenderer.on("newFile", () => {
     webPort.postMessage({ name: "newFile", args: {} });
   });
-  E.ipcRenderer.on("handleAction", (_: Event, action: string, source: string) => {
+  E.ipcRenderer.on("handleAction", (_: IpcRendererEvent, action: string, source: string) => {
     webPort.postMessage({ name: "handleAction", args: { action, source } });
   });
-  E.ipcRenderer.on("handleUrl", (_: Event, path: string, params: string) => {
-    console.log("handleUrl, url: ", path);
+  E.ipcRenderer.on("handleUrl", (_: IpcRendererEvent, path: string, params: string) => {
     webPort.postMessage({ name: "handleUrl", args: { path, params } });
   });
-  E.ipcRenderer.on("handlePageCommand", (_: Event, command: string) => {
+  E.ipcRenderer.on("handlePageCommand", (_: IpcRendererEvent, command: string) => {
     const fullscreenFocusTargetFocused =
       document.activeElement && document.activeElement.classList.contains("focus-target");
     if (fullscreenFocusTargetFocused) {
@@ -218,11 +169,11 @@ const initWebBindings = (): void => {
     }
   });
 
-  E.ipcRenderer.on("redeemAppAuth", (event: Event, gSecret: string) => {
+  E.ipcRenderer.on("redeemAppAuth", (event: IpcRendererEvent, gSecret: string) => {
     webPort.postMessage({ name: "redeemAppAuth", args: { gSecret } });
   });
 
-  E.ipcRenderer.on("handlePluginMenuAction", (event: Event, pluginMenuAction: any) => {
+  E.ipcRenderer.on("handlePluginMenuAction", (event: IpcRendererEvent, pluginMenuAction: any) => {
     webPort.postMessage({ name: "handlePluginMenuAction", args: { pluginMenuAction } });
   });
 };
@@ -233,7 +184,7 @@ const publicAPI: any = {
   },
 
   setUser(args: WebApi.SetUser) {
-    sendMsgToMain("setAuthedUsers", [args.id]);
+    sendMsgToMain("setUser", args.id);
   },
   setUsingMicrophone(args: WebApi.SetUsingMic) {
     sendMsgToMain("setUsingMicrophone", args.isUsingMicrophone);
@@ -265,8 +216,12 @@ const publicAPI: any = {
   newFile(args: any) {
     sendMsgToMain("newFile", args.info);
   },
+  // TODO: need update
   openFile(args: any) {
     sendMsgToMain("openFile", "/file/" + args.fileKey, args.title, undefined, args.target);
+  },
+  openCommunity(args: WebApi.OpenCommunity) {
+    sendMsgToMain("openCommunity", args);
   },
   openPrototype(args: any) {
     sendMsgToMain(
@@ -277,6 +232,46 @@ const publicAPI: any = {
       args.target,
     );
   },
+  // TODO:
+  // async isTabOpen(args: any) {
+  //   console.log("isTabOpen, args: ", args);
+  //   //   {
+  //   //     "url": "https://www.figma.com/file/new?editor_type=design&localFileKey=LOCAL_e8ed2b31-ac61-435c-999c-84d85395e349&fuid=525661429846675544",
+  //   //     "newFileInfo": {
+  //   //         "folder_id": null,
+  //   //         "org_id": null,
+  //   //         "openNewFileIn": "new_tab",
+  //   //         "trackingInfo": {
+  //   //             "from": "desktop_new_tab_button",
+  //   //             "selectedView": {
+  //   //                 "view": "desktopNewTab"
+  //   //             }
+  //   //         },
+  //   //         "editorType": "design",
+  //   //         "localFileKey": "LOCAL_e8ed2b31-ac61-435c-999c-84d85395e349"
+  //   //     },
+  //   //     "editorType": "design",
+  //   //     "isFromNewTabPage": true
+  //   // }
+  //   // return { data: await n.sendAsync("isTabOpen", e.getString("url")) };
+  // },
+  // openFileFromNewTab(args: any) {
+  //   console.log("openFileFromNewTab, args: ", args);
+  //   // n.send(
+  //   //   "openFileFromNewTab",
+  //   //   e.getString("url"),
+  //   //   e.getString("editorType", "") || void 0,
+  //   //   e.getString("title", "") || void 0,
+  //   //   e.getBoolean("isBranch", !1),
+  //   //   e.getBoolean("isLibrary", !1),
+  //   //   e.getBoolean("isTeamTemplate", !1),
+  //   // );
+  // },
+  async createFile(args: WebApi.CreateFile) {
+    const result = await E.ipcRenderer.invoke("createFile", args);
+
+    return { data: result };
+  },
   close(args: any) {
     sendMsgToMain("closeTab", args.suppressReopening);
   },
@@ -286,8 +281,8 @@ const publicAPI: any = {
   setSaved(args: any) {
     sendMsgToMain("updateSaveStatus", args.saved);
   },
-  updateActionState(args: any) {
-    sendMsgToMain("updateActionState", args.state);
+  updateFullscreenMenuState(args: any) {
+    sendMsgToMain("updateFullscreenMenuState", args.state);
   },
   showFileBrowser() {
     sendMsgToMain("showFileBrowser");
@@ -295,18 +290,22 @@ const publicAPI: any = {
   setIsPreloaded() {
     sendMsgToMain("setIsPreloaded");
   },
-  setPluginMenuData(args: WebApi.SetPluginMenuDataProps) {
-    const pluginMenuData = [];
-    for (const item of args.data) {
-      if (isMenuItem(item)) {
-        pluginMenuData.push(item);
-      } else {
-        // sendMsgToMain("log-error", "[desktop] invalid plugin menu item", args);
-      }
-    }
-
-    sendMsgToMain("setPluginMenuData", pluginMenuData);
+  // TODO:
+  // setEditorType(args: any) {
+  //   console.log("setEditorType, args: ", args);
+  //   // n.send("updateEditorType", e.getString("editorType"));
+  // },
+  // setRealtimeToken(args: any) {
+  //   console.log("setRealtimeToken, args: ", args);
+  //   // n.send("setRealtimeToken", e.getString("realtimeToken"), e.getString("fileKey"));
+  // },
+  setInitialOptions(args: WebApi.SetInitOptions) {
+    sendMsgToMain("setInitialOptions", args);
   },
+  // setTheme(args: any) {
+  //   console.log("isTabOpen, args: ", args);
+  //   // n.send("setTheme", e.getString("theme", "dark"));
+  // },
 
   setFeatureFlags(args: any) {
     sendMsgToMain("setFeatureFlags", args);
@@ -332,7 +331,6 @@ const publicAPI: any = {
   },
 
   async createMultipleNewLocalFileExtensions(args: WebApi.CreateMultipleExtension) {
-    console.log("createMultipleNewLocalFileExtensions, args: ", args);
     const result = await E.ipcRenderer.invoke("createMultipleNewLocalFileExtensions", args);
 
     return { data: result };
@@ -439,7 +437,6 @@ const publicAPI: any = {
   },
 
   async writeFiles(args: WebApi.WriteFiles) {
-    console.log("writeFiles, args: ", args);
     await E.ipcRenderer.invoke("writeFiles", args);
   },
 };
@@ -467,7 +464,7 @@ const init = (fileBrowser: boolean): void => {
 
   E.webFrame.executeJavaScript(`(${initWebApi.toString()})(${JSON.stringify(initWebOptions)})`);
 
-  document.addEventListener("load", () => {
+  document.addEventListener("DOMContentLoaded", () => {
     E.ipcRenderer.invoke("themesIsDisabled").then((disabled) => {
       if (!disabled) {
         setTimeout(() => {

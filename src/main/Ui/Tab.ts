@@ -43,6 +43,9 @@ export default class Tab {
     this.url = url;
     this.view.webContents.loadURL(url);
   }
+  public getUrl() {
+    return this.view.webContents.getURL();
+  }
   public setAutosize(flag: boolean) {
     this.view.setAutoResize({
       width: flag,
@@ -107,6 +110,7 @@ export default class Tab {
     const to = parse(newUrl);
 
     if (from.pathname === "/login") {
+      // TODO:
       // this.tabManager.reloadAll();
 
       event.preventDefault();
@@ -138,24 +142,23 @@ export default class Tab {
     shell.openExternal(url);
   }
 
-  public async requestMicrophonePermission() {
-    this.view.webContents.session.setPermissionRequestHandler(this.permissionHandler);
-  }
   private permissionHandler(
     webContents: WebContents,
     permission:
       | "clipboard-read"
-      | "media"
+      | "clipboard-sanitized-write"
       | "display-capture"
-      | "mediaKeySystem"
+      | "fullscreen"
       | "geolocation"
-      | "notifications"
+      | "idle-detection"
+      | "media"
+      | "mediaKeySystem"
       | "midi"
       | "midiSysex"
+      | "notifications"
       | "pointerLock"
-      | "fullscreen"
       | "openExternal"
-      | "window-placement"
+      | "window-management"
       | "unknown",
     callback: (permissionGranted: boolean) => void,
     details: PermissionRequestHandlerHandlerDetails,

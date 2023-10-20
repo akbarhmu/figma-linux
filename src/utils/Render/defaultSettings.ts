@@ -12,6 +12,7 @@ export const DEFAULT_SETTINGS: Types.SettingsInterface = {
     disableThemes: false,
     panelHeight: 40,
     saveLastOpenedTabs: true,
+    hasOpenedCommunityTab: false,
     exportDir: `${process.env.HOME}/Pictures/Figma`,
     fontDirs: [
       "/usr/share/fonts",
@@ -20,6 +21,8 @@ export const DEFAULT_SETTINGS: Types.SettingsInterface = {
       "/run/host/user-fonts",
       `${process.env.HOME}/.local/share/fonts`,
     ],
+    recentlyClosedTabs: [],
+    windowsState: {},
     lastOpenedTabs: {},
     featureFlags: {},
     savedExtensions: [],

@@ -1,17 +1,26 @@
 import { app, ipcMain, Rectangle, IpcMainEvent } from "electron";
 
-import { HOMEPAGE, RECENT_FILES } from "Const";
-import { toggleDetachedDevTools } from "Utils/Main";
-import { isValidProjectLink } from "Utils/Common";
+import { NEW_FILE_TAB_TITLE, RECENT_FILES } from "Const";
 import MainTab from "./MainTab";
+import CommunityTab from "./CommunityTab";
 import Tab from "./Tab";
 import { storage } from "Main/Storage";
 
 export default class TabManager {
   public mainTab: MainTab;
+  public communityTab: CommunityTab | undefined;
+  public hasOpenedNewFileTab: boolean = false;
+  public hasOpenedCommunityTab: boolean = false;
 
-  private lastFocusedTab: number | undefined;
+  public lastFocusedTab: number | undefined;
   private tabs: Map<number, Tab> = new Map();
+
+  public get mainTabWebContentId() {
+    return this.mainTab.view.webContents.id;
+  }
+  public get communityTabWebContentId() {
+    return this.communityTab ? this.communityTab.view.webContents.id : undefined;
+  }
 
   constructor(private windowId: number) {
     this.mainTab = new MainTab(this.windowId);
@@ -20,6 +29,9 @@ export default class TabManager {
     this.registerEvents();
   }
 
+  public setUserId(id: string) {
+    this.mainTab.setUserId(id);
+  }
   public addTab(url = RECENT_FILES, title?: string): Tab {
     const tab = new Tab(this.windowId);
 
@@ -27,16 +39,31 @@ export default class TabManager {
     tab.loadUrl(url);
     this.tabs.set(tab.id, tab);
 
+    if (title === NEW_FILE_TAB_TITLE) {
+      this.hasOpenedNewFileTab = true;
+    }
+
     return tab;
+  }
+
+  public addCommunityTab() {
+    this.communityTab = new CommunityTab(this.windowId);
+  }
+  public closeCommunityTab() {
+    if (this.communityTab.view.webContents && !this.communityTab.view.webContents.isDestroyed()) {
+      this.communityTab.view.webContents.destroy();
+    }
+
+    this.communityTab = undefined;
   }
 
   public closeAll() {
     this.tabs.clear();
   }
-  public close(tabId: number): number {
+  public close(tabId: number): Types.TabIdType {
     const tab = this.tabs.get(tabId);
     const array = [...this.tabs.entries()];
-    let nextTabId: number;
+    let nextTabId: Types.TabIdType;
 
     for (let i = 0; i < array.length; i++) {
       const tab = array[i];
@@ -56,8 +83,15 @@ export default class TabManager {
     if (tab.view.webContents && !tab.view.webContents.isDestroyed()) {
       tab.view.webContents.destroy();
     }
+    if (tab.title === NEW_FILE_TAB_TITLE) {
+      this.hasOpenedNewFileTab = false;
+    }
 
     this.tabs.delete(tabId);
+
+    if (!nextTabId) {
+      nextTabId = this.hasOpenedCommunityTab ? "communityTab" : "mainTab";
+    }
 
     return nextTabId;
   }
@@ -69,6 +103,7 @@ export default class TabManager {
   }
   public updateScaleAll(scale: number) {
     this.mainTab.updateScale(scale);
+    this.communityTab && this.communityTab.updateScale(scale);
     this.tabs.forEach((t) => t.updateScale(scale));
   }
 
@@ -102,7 +137,7 @@ export default class TabManager {
   }
 
   public reloadTab(tabId: number) {
-    const tab = this.tabs.get(tabId);
+    const tab = this.getById(tabId);
 
     tab.view.webContents.reload();
   }
@@ -118,29 +153,69 @@ export default class TabManager {
   public handleUrl(path: string) {
     this.mainTab.handleUrl(path);
   }
-  public getById(id: number) {
-    return this.tabs.get(id);
+  public getById(id: Types.TabIdType) {
+    switch (id) {
+      case "mainTab": {
+        return this.mainTab;
+      }
+      case "communityTab": {
+        return this.communityTab;
+      }
+      default: {
+        if (this.tabs.has(id)) {
+          return this.tabs.get(id);
+        } else if (this.mainTab.id === id) {
+          return this.mainTab;
+        } else if (this.communityTab.id === id) {
+          return this.communityTab;
+        }
+      }
+    }
+
+    return this.mainTab;
+  }
+  public getByTitle(title: string) {
+    let foundTab: Tab | undefined;
+
+    this.tabs.forEach((tab) => {
+      if (tab.title === title) {
+        foundTab = tab;
+      }
+    });
+
+    return foundTab;
   }
   public getAll = () => this.tabs;
 
-  public focusTab(id: number) {
-    this.lastFocusedTab = id;
+  public focusTab(id: Types.TabIdType) {
+    const tab = this.getById(id);
+
+    this.lastFocusedTab = tab.id;
   }
   public setTitle(id: number, title: string) {
-    const tab = this.tabs.get(id);
+    const tab = this.getById(id);
 
-    tab.title = title;
+    if (tab instanceof Tab) {
+      tab.title = title;
+    }
   }
   public setBounds(id: number, bounds: Rectangle) {
-    const tab = this.tabs.get(id);
+    const tab = this.getById(id);
 
     tab.setBounds(bounds);
   }
   public focusMainTab() {
     this.lastFocusedTab = this.mainTab.id;
   }
+  public focusCommunityTab() {
+    this.lastFocusedTab = this.communityTab.id;
+  }
   public setBoundsForAllTab(bounds: Rectangle) {
     this.mainTab.setBounds(bounds);
+
+    if (this.hasOpenedCommunityTab) {
+      this.communityTab.setBounds(bounds);
+    }
 
     for (const [_, tab] of this.tabs) {
       tab.setBounds(bounds);
@@ -164,6 +239,15 @@ export default class TabManager {
     return tab.view.webContents.getURL();
   }
 
+  public isNewFileTab(tabId: number) {
+    for (const [_, tab] of this.tabs) {
+      if (tab.title && tab.title === NEW_FILE_TAB_TITLE && tab.id === tabId) {
+        return true;
+      }
+    }
+
+    return false;
+  }
   public isMainTab(tabId: number) {
     const keys = [...this.tabs.keys()];
 
@@ -174,25 +258,15 @@ export default class TabManager {
     return false;
   }
 
-  private async requestMicrophonePermission(event: IpcMainEvent) {
-    const tab = this.tabs.get(event.sender.id);
-
-    return tab.requestMicrophonePermission();
-  }
-
-  private toggleCurrentTabDevTools() {
-    const tab = this.getById(this.lastFocusedTab) || this.mainTab;
-
-    toggleDetachedDevTools(tab.view.webContents);
-  }
-  private handlePluginMenuAction(pluginMenuAction: Menu.MenuAction) {
-    const tab = this.getById(this.lastFocusedTab) || this.mainTab;
+  public handlePluginMenuAction(pluginMenuAction: Menu.MenuAction) {
+    const tab = this.getById(this.lastFocusedTab);
 
     tab.view.webContents.send("handlePluginMenuAction", pluginMenuAction);
   }
 
   private loadCurrentTheme(theme: Themes.Theme) {
     this.mainTab.loadTheme(theme);
+    this.communityTab && this.communityTab.loadTheme(theme);
     this.tabs.forEach((t) => t.view.webContents.send("loadCurrentTheme", theme));
   }
   private changeTheme(_: IpcMainEvent, theme: Themes.Theme) {
@@ -202,12 +276,8 @@ export default class TabManager {
   }
 
   private registerEvents() {
-    ipcMain.handle("requestMicrophonePermission", this.requestMicrophonePermission.bind(this));
-
     ipcMain.on("changeTheme", this.changeTheme.bind(this));
 
-    app.on("toggleCurrentTabDevTools", this.toggleCurrentTabDevTools.bind(this));
-    app.on("handlePluginMenuAction", this.handlePluginMenuAction.bind(this));
     app.on("loadCurrentTheme", this.loadCurrentTheme.bind(this));
   }
 }
